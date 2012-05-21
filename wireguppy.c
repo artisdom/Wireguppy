@@ -94,10 +94,15 @@ int get_pcap_header( void )
     int snaplen       = flip32( get32() );
     int network       = flip32( get32() );
 
-    if ( magic_number != 0xa1b2c3d4 )
+    if ( magic_number != 0xa1b2c3d4 ) {
+        fprintf( stderr, "Error: Wrong file type.\n" );
         return 1;
-    if ( network != 1 )
+    }
+    if ( network != 1 ) {
+        fprintf( stderr, "Error: Currently only Ethernet packets \
+                          are supported.\n" );
         return 1;
+    }
 
     printf( "Magic Number: %08x\n", magic_number );
     printf( "Version: %d.%d\n", major_version, minor_version );
@@ -112,10 +117,10 @@ int get_pcap_header( void )
 
 int get_packet_header( void )
 {
-    int ts_sec   = flip32( get32() );
-    int ts_usec  = flip32( get32() );
-    int incl_len = flip32( get32() );
-    int orig_len = flip32( get32() );
+    unsigned int ts_sec   = flip32( get32() );
+    unsigned int ts_usec  = flip32( get32() );
+    int incl_len          = flip32( get32() );
+    int orig_len          = flip32( get32() );
 
 
     printf( "Timestamp: %d.%06d\n", ts_sec, ts_usec );
@@ -160,6 +165,44 @@ void get_ipv4_addr( void )
         printf( ".%d", getchar() );
 
     return;
+}
+
+
+void get_raw_payload( int len )
+{
+    int i;
+    int ch;
+    char * human_read;
+
+    human_read = calloc( len + 1, sizeof( char ) );
+
+    printf( "Raw payload: \n" );
+
+    for ( i = 1; i <= len; i++ ) {
+        ch = getchar();
+
+        printf( "%02X ", ch );
+
+        if ( i % 25 == 0 && i > 1 )
+            printf( "\n" );
+        if ( ch > 31 && ch < 127 )
+            human_read[ i - 1 ] = ch;
+        else
+            human_read[ i - 1 ] = '.';
+
+        human_read[ i ] = '\0';
+    }
+
+    printf( "\n" );
+    for ( i = 1; i <= len; i++ ) {
+        printf( "%c", human_read[ i - 1 ] );
+        if ( i % 25 == 0 && i > 1 )
+            printf( "\n" );
+    }
+
+    printf( "\n" );
+
+    free( human_read );
 }
 
 
@@ -208,10 +251,9 @@ int decode_tcp( int len )
 
     for ( i = 0; i < options_len; i++ )
         printf( "Options: %04x\n", get32() );
+
+    get_raw_payload( len - ( data_offset * 4 ) );
     
-    printf( "Raw payload: \n" );
-    for ( i = 0; i < len - ( data_offset * 4 ); i++ )
-        printf( "%c", getchar() );
 
     return 0;
 }
@@ -219,7 +261,6 @@ int decode_tcp( int len )
 
 int decode_udp( void )
 {
-    int i;
     int source_port = get16();
     int dest_port   = get16();
     int len         = get16();
@@ -230,9 +271,7 @@ int decode_udp( void )
     printf( "Length: %d bytes\n", len );
     printf( "Checksum: %02x\n", checksum );
 
-    printf( "Raw payload: \n" );
-    for ( i = 0; i < len - 8; i++ )
-        printf( "%c", getchar() );
+    get_raw_payload( len - 8 );
 
     return 0;
 }
@@ -343,8 +382,10 @@ int decode_pcap( void )
             lt = decode_ipv6();
         else if ( lt <= 1500 )
             skip_bytes( lt );
-        else
+        else {
+            fprintf( stderr, "Error: Unsupported packet type.\n" );
             exit( 1 );
+        }
 
         len -= 14; /* 6 src + 6 des + 2 lt */
         len -= lt;
@@ -388,8 +429,10 @@ int decode_raw( void )
             lt = decode_ipv6();
         else if ( lt <= 1500 )
             skip_bytes( lt );
-        else
+        else {
+            fprintf( stderr, "Error: Unsupported packet type.\n" );
             exit( 1 );
+        }
 
         ch = getchar();
         if ( ch == EOF )
@@ -406,7 +449,10 @@ int decode_raw( void )
 int main( int argc, const char *argv[] )
 {
     if ( argc > 1 ) {
-        assert( strcmp( argv[1], "-r" ) == 0 );
+        if ( argc > 2 || strcmp( argv[1], "-r" ) != 0 ) {
+            fprintf( stderr, "Error: flag not supported.\n" );
+            exit( 1 );
+        }
         RAW_MODE = 1;
     }
 
