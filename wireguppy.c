@@ -4,10 +4,11 @@
  * the instruction of professor Bart Massey. 
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
+#include <time.h>
 
 int RAW_MODE = 0;
 
@@ -117,13 +118,17 @@ int get_pcap_header( void )
 
 int get_packet_header( void )
 {
-    unsigned int ts_sec   = flip32( get32() );
+    struct tm * timestamp;
+    char buffer[ 80 ];
+
+    time_t ts_sec         = flip32( get32() );
     unsigned int ts_usec  = flip32( get32() );
     int incl_len          = flip32( get32() );
     int orig_len          = flip32( get32() );
 
-
-    printf( "Timestamp: %d.%06d\n", ts_sec, ts_usec );
+    timestamp = localtime( &ts_sec );
+    strftime( buffer, 80, "%B %d, %Y %H:%M:%S", timestamp );
+    printf( "Timestamp: %s.%06d\n", buffer, ts_usec );
     printf( "Length of packet on network: %d bytes\n", orig_len );
     printf( "Length of packet actually captured: %d bytes\n", incl_len );
 
@@ -170,7 +175,7 @@ void get_ipv4_addr( void )
 
 void get_raw_payload( int len )
 {
-    int i;
+    int i, j;
     int ch;
     char * human_read;
 
@@ -182,22 +187,22 @@ void get_raw_payload( int len )
         ch = getchar();
 
         printf( "%02X ", ch );
-
-        if ( i % 25 == 0 && i > 1 )
-            printf( "\n" );
+        
         if ( ch > 31 && ch < 127 )
             human_read[ i - 1 ] = ch;
         else
             human_read[ i - 1 ] = '.';
 
         human_read[ i ] = '\0';
-    }
 
-    printf( "\n" );
-    for ( i = 1; i <= len; i++ ) {
-        printf( "%c", human_read[ i - 1 ] );
-        if ( i % 25 == 0 && i > 1 )
-            printf( "\n" );
+        if ( i % 16 == 0 && i > 1 )
+            printf( "\t%s\n", human_read + ( i - 16 ) );
+        if ( i == len ) {
+            for ( j = 16 - ( len % 16 ); j > 0; j-- )
+                printf( "   " );
+            printf( "\t%s\n", human_read + ( i - ( len % 16 ) ) );
+        }
+
     }
 
     printf( "\n" );
