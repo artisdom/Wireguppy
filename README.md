@@ -1,11 +1,11 @@
 # Wireguppy
 Copyright © 2012 Thomas Schreiber
 
-## Discription:
+## Description:
 A simple pcap parser written for CS494 at Portland State University under the
 instruction of professor Bart Massey. Wireguppy currently parses Ethernet
-packets that contain IPv4 or IPv6 packets that in turn contain TCP or UDP
-packets.
+packets that contain IPv4, IPv6, or ARP packets that in turn contain TCP, UDP,
+UDP-Lite, ICMP, or ICMPv6 packets.
 
 ## Synopsis:
     ./wireguppy [-r] < STREAM
@@ -16,11 +16,14 @@ packets.
 ## Installation:
     make
 
-## Uninstallation:
+## Cleanup:
     make clean
 
 ## Testing:
+Run them all with:
     make test
+Alternatively, they can be run individually with:
+    make test<number>
 
 ## Resources:
 TCP/IP Illustrated Volume 1 Second Edition,

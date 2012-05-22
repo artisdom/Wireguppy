@@ -12,6 +12,29 @@
 
 int RAW_MODE = 0;
 
+int get16( void ); 
+int flip16( int x );
+int get32( void );
+int flip32( int x );
+void get_mac( void );
+int get_length_type( void );
+int get_pcap_header( void );
+int get_packet_header( void );
+void skip_bytes( int len );
+void get_ipv6_addr( void );
+void get_ipv4_addr( void );
+void get_raw_payload( int len );
+int decode_tcp( int len );
+int decode_udp( void );
+int decode_icmp( int len );
+int decode_icmpv6( int len );
+int decode_udp_lite( int len );
+int decode_ipv6( void );
+int decode_ipv4( void );
+int decode_arp( void );
+int decode_pcap( void );
+int decode_raw( void );
+
 
 int get16( void ) 
 {
@@ -282,6 +305,58 @@ int decode_udp( void )
 }
 
 
+int decode_icmp( int len )
+{
+    int type     = getchar();
+    int code     = getchar();
+    int checksum = get16();
+    int header   = get32();
+
+    printf( "Type: %d\n", type );
+    printf( "Code: %d\n", code );
+    printf( "Checksum: %x\n", checksum );
+    printf( "Rest of Header: %X\n", header );
+
+    get_raw_payload( len - 8 );
+
+    return 0;
+}
+
+
+int decode_icmpv6( int len )
+{
+    int type     = getchar();
+    int code     = getchar();
+    int checksum = get16();
+
+    printf( "Type: %d\n", type );
+    printf( "Code: %d\n", code );
+    printf( "Checksum: %x\n", checksum );
+
+    get_raw_payload( len - 4 );
+
+    return 0;
+}
+
+
+int decode_udp_lite( int len )
+{
+    int source   = get16();
+    int dest     = get16();
+    int coverage = get16();
+    int checksum = get16();
+
+    printf( "Source Port: %d\n", source );
+    printf( "Destination Port: %d\n", dest );
+    printf( "Coverage: %d bytes\n", coverage );
+    printf( "Checksum: %x\n", checksum );
+
+    get_raw_payload( len - 8 );
+
+    return 0;
+}
+
+
 int decode_ipv6( void )
 {
     int vtf = get32();
@@ -305,12 +380,27 @@ int decode_ipv6( void )
     get_ipv6_addr();
     printf( "\n" );
 
-    if ( next_header == 6 ) {
+    if ( next_header == 1 ) {
+        printf( "ICMP:\n" );
+        decode_icmp( payload_length );
+    } else if( next_header == 4 ) {
+        printf( "Encapsalated IPv4:\n" );
+        decode_ipv4();
+    } else if ( next_header == 6 ) {
         printf( "TCP:\n" );
         decode_tcp( payload_length );
     } else if ( next_header == 17 ) {
         printf( "UDP:\n" );
         decode_udp();
+    } else if ( next_header == 41 ) {
+        printf( "Encapsalated IPv6:\n" );
+        decode_ipv6();
+    } else if ( next_header == 58 ) {
+        printf( "ICMPv6:\n" );
+        decode_icmpv6( payload_length );
+    } else if ( next_header == 136 ) {
+        printf( "UDP-Lite:\n" );
+        decode_udp_lite( payload_length );
     } else
         skip_bytes( payload_length );
 
@@ -345,16 +435,95 @@ int decode_ipv4( void )
     get_ipv4_addr();
     printf( "\n" );
 
-    if ( protocol == 6 ) {
+    if ( protocol == 1 ) {
+        printf( "ICMP:\n" );
+        decode_icmp( length - 20 );
+    } else if ( protocol == 4 ) {
+        printf( "Encapsalated IPv4:\n" );
+        decode_ipv4();
+    } else if ( protocol == 6 ) {
         printf( "TCP:\n" );
         decode_tcp( length - 20 );
     } else if ( protocol == 17 ) {
         printf( "UDP:\n" );
         decode_udp();
+    } else if ( protocol == 41 ) {
+        printf( "Encapsalated IPv6:\n" );
+        decode_ipv6();
+    } else if ( protocol == 58 ) {
+        printf( "ICMPv6:\n" );
+        decode_icmpv6( length - 20 );
+    } else if ( protocol == 136 ) {
+        printf( "UDP-Lite:\n" );
+        decode_udp_lite( length - 20 );
     } else
         skip_bytes( length - 20 );
 
     return length;
+}
+
+
+int decode_arp( void )
+{
+    int htype = get16();
+    int ptype = get16();
+    int hlen  = getchar();
+    int plen  = getchar();
+    int oper  = get16();
+    int len   = 8;
+
+    printf( "ARP: \n" );
+    printf( "Hardware Type: %d\n", htype );
+    printf( "Protocol Type: %04X\n", ptype );
+    printf( "Hardware Length: %d\n", hlen );
+    printf( "Protocol Length: %d\n", plen );
+    printf( "Operation: ");
+    if ( oper == 1 )
+        printf( "request\n" );
+    else
+        printf( "response\n" );
+
+    if ( htype != 1 ) {
+        fprintf( stderr, "Error: Unsupported protocol\n" );
+        exit( 1 );
+    }
+
+    printf( "Sender Hardware Address: " );
+    get_mac();
+    printf( "\n" );
+    len += hlen;
+
+    printf( "Sender Protocol Address: " );
+    if ( ptype == 0x0800 )
+        get_ipv4_addr();
+    else if ( ptype == 0x86dd )
+        get_ipv6_addr();
+    else {
+        fprintf( stderr, "Error: Unsupported protocol\n" );
+        exit( 1 );
+    }
+    printf( "\n" );
+    len += plen;
+
+
+    printf( "Target Hardware Address: " );
+    get_mac();
+    printf( "\n" );
+    len += hlen;
+
+    printf( "Target Protocol Address: " );
+    if ( ptype == 0x0800 )
+        get_ipv4_addr();
+    else if ( ptype == 0x86dd )
+        get_ipv6_addr();
+    else {
+        fprintf( stderr, "Error: Unsupported protocol\n" );
+        exit( 1 );
+    }
+    printf( "\n" );
+    len += plen;
+
+    return len;
 }
 
 
@@ -383,6 +552,8 @@ int decode_pcap( void )
         lt = get_length_type();
         if ( lt == 0x0800 )
             lt = decode_ipv4();
+        else if ( lt == 0x0806 )
+            lt = decode_arp();
         else if ( lt == 0x86dd )
             lt = decode_ipv6();
         else if ( lt <= 1500 )
@@ -430,6 +601,8 @@ int decode_raw( void )
         lt = get_length_type();
         if ( lt == 0x0800 )
             lt = decode_ipv4();
+        else if ( lt == 0x0806 )
+            lt = decode_arp();
         else if ( lt == 0x86dd )
             lt = decode_ipv6();
         else if ( lt <= 1500 )
