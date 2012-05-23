@@ -25,13 +25,15 @@ UDP-Lite, ICMP, or ICMPv6 packets.
     make clean
 
 ## Testing:
-Run them all with:
+###Run them all with:
     make test
-Alternatively, they can be run individually with:
+###Alternatively, they can be run individually with:
     make test<number>
 
 ## Resources:
 TCP/IP Illustrated Volume 1 Second Edition,
     Kevin R. Fall & W. Richard Stevens, Pearson Education Inc., 2012
+
 http://wiki.wireshark.org/Development/LibpcapFileFormat
+
 http://wiki.wireshark.org/SampleCaptures
