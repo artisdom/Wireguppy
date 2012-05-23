@@ -4,26 +4,35 @@
  * the instruction of professor Bart Massey. 
  */
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
-int RAW_MODE = 0;
+/* Globals for handling cmd line options */
+int RAW_MODE     = 0;  /* Raw stream or formatted in libpcap format */
+int VERBOSE_MODE = 0;  /* Print application layer payload */
+FILE * PCAP_FILE;      /* File pointer to stream to be parsed */
 
+/* These functions run getc multiple times and return a larger value */
 int get16( void ); 
-int flip16( int x );
 int get32( void );
+
+/* These change the endianess of x */
+int flip16( int x );
 int flip32( int x );
+
+/* Gets and prints address */
 void get_mac( void );
-int get_length_type( void );
-int get_pcap_header( void );
-int get_packet_header( void );
-void skip_bytes( int len );
 void get_ipv6_addr( void );
 void get_ipv4_addr( void );
+
+/* Skip and/or output len bytes */
+void skip_bytes( int len );
 void get_raw_payload( int len );
+
+/* Decode various packets */
 int decode_tcp( int len );
 int decode_udp( void );
 int decode_icmp( int len );
@@ -32,14 +41,21 @@ int decode_udp_lite( int len );
 int decode_ipv6( void );
 int decode_ipv4( void );
 int decode_arp( void );
-int decode_pcap( void );
 int decode_raw( void );
+
+/* Decode libpcap */
+int decode_pcap( void );
+int get_pcap_header( void );
+int get_packet_header( void );
+
+/* Get packet type or length */
+int get_length_type( void );
 
 
 int get16( void ) 
 {
-    int byte1 = getchar();
-    int byte2 = getchar();
+    int byte1 = getc( PCAP_FILE );
+    int byte2 = getc( PCAP_FILE );
     return ( ( byte1 << 8 ) & 0xff00 )
         | ( byte2 & 0xff );
 }
@@ -54,10 +70,10 @@ int flip16( int x )
 
 int get32( void )
 {
-    int byte1 = getchar();
-    int byte2 = getchar();
-    int byte3 = getchar();
-    int byte4 = getchar();
+    int byte1 = getc( PCAP_FILE );
+    int byte2 = getc( PCAP_FILE );
+    int byte3 = getc( PCAP_FILE );
+    int byte4 = getc( PCAP_FILE );
     return ( ( byte1 << 24 ) & 0xff000000 )
          | ( ( byte2 << 16 ) & 0xff0000 )
          | ( ( byte3 << 8 ) & 0xff00 )
@@ -78,10 +94,10 @@ void get_mac( void )
 {
     int i;
 
-    printf( "%02x", getchar() );
+    printf( "%02x", getc( PCAP_FILE ) );
 
     for ( i = 0; i < 5; i++) {
-        printf( ":%02x", getchar() );
+        printf( ":%02x", getc( PCAP_FILE ) );
     }
 
     return;
@@ -164,7 +180,7 @@ void skip_bytes( int len )
     int i;
 
     for ( i = 0; i < len; i++ )
-        getchar();
+        getc( PCAP_FILE );
 
     return;
 }
@@ -187,10 +203,10 @@ void get_ipv4_addr( void )
 {
     int i;
 
-    printf( "%d", getchar() );
+    printf( "%d", getc( PCAP_FILE ) );
 
     for ( i = 0; i < 3; i++ )
-        printf( ".%d", getchar() );
+        printf( ".%d", getc( PCAP_FILE ) );
 
     return;
 }
@@ -202,35 +218,41 @@ void get_raw_payload( int len )
     int ch;
     char * human_read;
 
-    human_read = calloc( len + 1, sizeof( char ) );
+    if ( VERBOSE_MODE ) {
 
-    printf( "Raw payload: \n" );
+        human_read = calloc( len + 1, sizeof( char ) );
 
-    for ( i = 1; i <= len; i++ ) {
-        ch = getchar();
+        printf( "Raw payload: \n" );
 
-        printf( "%02X ", ch );
-        
-        if ( ch > 31 && ch < 127 )
-            human_read[ i - 1 ] = ch;
-        else
-            human_read[ i - 1 ] = '.';
+        for ( i = 1; i <= len; i++ ) {
+            ch = getc( PCAP_FILE );
 
-        human_read[ i ] = '\0';
+            printf( "%02X ", ch );
+            
+            if ( ch > 31 && ch < 127 )
+                human_read[ i - 1 ] = ch;
+            else
+                human_read[ i - 1 ] = '.';
 
-        if ( i % 16 == 0 && i > 1 )
-            printf( "\t%s\n", human_read + ( i - 16 ) );
-        if ( i == len ) {
-            for ( j = 16 - ( len % 16 ); j > 0; j-- )
-                printf( "   " );
-            printf( "\t%s\n", human_read + ( i - ( len % 16 ) ) );
+            human_read[ i ] = '\0';
+
+            if ( i % 16 == 0 && i > 1 )
+                printf( "\t%s\n", human_read + ( i - 16 ) );
+            if ( i == len ) {
+                for ( j = 16 - ( len % 16 ); j > 0; j-- )
+                    printf( "   " );
+                printf( "\t%s\n", human_read + ( i - ( len % 16 ) ) );
+            }
+
         }
 
-    }
+        printf( "\n" );
 
-    printf( "\n" );
+        free( human_read );
 
-    free( human_read );
+    } else
+        skip_bytes( len );
+
 }
 
 
@@ -307,8 +329,8 @@ int decode_udp( void )
 
 int decode_icmp( int len )
 {
-    int type     = getchar();
-    int code     = getchar();
+    int type     = getc( PCAP_FILE );
+    int code     = getc( PCAP_FILE );
     int checksum = get16();
     int header   = get32();
 
@@ -325,8 +347,8 @@ int decode_icmp( int len )
 
 int decode_icmpv6( int len )
 {
-    int type     = getchar();
-    int code     = getchar();
+    int type     = getc( PCAP_FILE );
+    int code     = getc( PCAP_FILE );
     int checksum = get16();
 
     printf( "Type: %d\n", type );
@@ -364,8 +386,8 @@ int decode_ipv6( void )
     int traffic_class = ( ( vtf >> 20 ) & 0xff );
     int flow_label = ( vtf & 0xff );
     int payload_length = get16();
-    int next_header = getchar();
-    int hop_limit = getchar();
+    int next_header = getc( PCAP_FILE );
+    int hop_limit = getc( PCAP_FILE );
 
     printf( "IPv: %d\n", version );
     printf( "Traffic Class: %02x\n", traffic_class );
@@ -410,14 +432,14 @@ int decode_ipv6( void )
 
 int decode_ipv4( void )
 {
-    int byte            = getchar();
+    int byte            = getc( PCAP_FILE );
     int version         = ( byte >> 4 );
-    int type_of_service = getchar();
+    int type_of_service = getc( PCAP_FILE );
     int length          = get16();
     int ident           = get16();
     int flags           = get16();
-    int ttl             = getchar();
-    int protocol        = getchar();
+    int ttl             = getc( PCAP_FILE );
+    int protocol        = getc( PCAP_FILE );
     int checksum        = get16();
 
     printf( "IPv: %d\n", version );
@@ -467,8 +489,8 @@ int decode_arp( void )
 {
     int htype = get16();
     int ptype = get16();
-    int hlen  = getchar();
-    int plen  = getchar();
+    int hlen  = getc( PCAP_FILE );
+    int plen  = getc( PCAP_FILE );
     int oper  = get16();
     int len   = 8;
 
@@ -565,15 +587,18 @@ int decode_pcap( void )
 
         len -= 14; /* 6 src + 6 des + 2 lt */
         len -= lt;
-        assert( len >= 0 );
+        if ( len < 0 ) {
+            fprintf( stderr, "Error: length mismatch\n" );
+            exit( 1 );
+        }
 
         for ( j = 0; j < len; j++ )
-            printf( "Pad: %02x\n", getchar() & 0xff );
+            printf( "Pad: %02x\n", getc( PCAP_FILE ) & 0xff );
 
-        ch = getchar();
+        ch = getc( PCAP_FILE );
         if ( ch == EOF )
             break;
-        (void) ungetc( ch, stdin );
+        ungetc( ch, PCAP_FILE );
 
         i++;
     }
@@ -612,7 +637,7 @@ int decode_raw( void )
             exit( 1 );
         }
 
-        ch = getchar();
+        ch = getc( PCAP_FILE );
         if ( ch == EOF )
             break;
         (void) ungetc( ch, stdin );
@@ -624,15 +649,42 @@ int decode_raw( void )
 }
 
 
-int main( int argc, const char *argv[] )
+int main( int argc, char **argv )
 {
-    if ( argc > 1 ) {
-        if ( argc > 2 || strcmp( argv[1], "-r" ) != 0 ) {
-            fprintf( stderr, "Error: flag not supported.\n" );
+    int opt;
+    char * pcap_file_name = NULL;
+
+    while ( ( opt = getopt( argc, argv, "rv" ) ) != -1 )
+        switch ( opt ) {
+            case 'r':
+                RAW_MODE = 1;
+                break;
+            case 'v':
+                VERBOSE_MODE = 1;
+                break;
+            case '?':
+                fprintf( stderr,
+                         "Error: No such option: '%c'\n",
+                         optopt
+                       );
+                exit( 1 );
+        }
+
+    if ( optind < argc - 1 ) {
+        fprintf( stderr, "Error: Too many arguments\n" );
+        exit( 1 );
+    }
+
+    if ( optind == argc - 1 )
+        pcap_file_name = argv[optind];
+
+    if ( pcap_file_name ) {
+        if ( !( PCAP_FILE = fopen( pcap_file_name, "rb" ) ) ) {
+            fprintf( stderr, "Error: Could not open file\n" );
             exit( 1 );
         }
-        RAW_MODE = 1;
-    }
+    } else
+        PCAP_FILE = stdin;
 
     printf( "Wireguppy\n" );
 
@@ -640,6 +692,11 @@ int main( int argc, const char *argv[] )
         decode_pcap();
     else
         decode_raw();
+
+    if ( PCAP_FILE != stdin ) {
+        if ( fclose( PCAP_FILE ) )
+            exit( 1 );
+    }
 
     return 0;
 }

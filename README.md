@@ -8,10 +8,15 @@ packets that contain IPv4, IPv6, or ARP packets that in turn contain TCP, UDP,
 UDP-Lite, ICMP, or ICMPv6 packets.
 
 ## Synopsis:
-    ./wireguppy [-r] < STREAM
+    ./wireguppy [OPTIONS] [FILE]
 
 ## Flags supported:
-    r    Raw Mode
+    r   Raw Mode
+        Takes file streams of raw captured data instead of the usual libpcap
+        file format.
+
+    v   Verbose Mode
+        Prints payload data in a hex editor style format.
 
 ## Installation:
     make
