@@ -9,7 +9,10 @@ wireguppy: wireguppy.o
 wireguppy.o: wireguppy.c
 	$(COMPILER) $(FLAGS) -c wireguppy.c
 
-test: test1 test2 test3 test4 test5 test6 test7 test8 test9 test10
+clean:
+	rm -rf *o wireguppy
+
+test: test1 test2 test3 test4 test5 test6 test7 test8 test9 test10 test11
 
 test1: wireguppy
 	@ [ ./wireguppy < tests/BITTORRENT.pcap ] && echo "Test 1 Passed"
@@ -42,5 +45,5 @@ test9: wireguppy
 test10: wireguppy
 	@ [ ./wireguppy < tests/v6.pcap ] && echo "Test 10 Passed"
 
-clean:
-	rm -rf *o wireguppy
+test11: wireguppy
+	@ [ ./wireguppy < tests/xmas2011.pcap ] && echo "Test 11 Passed"

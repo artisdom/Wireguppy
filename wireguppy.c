@@ -138,9 +138,10 @@ int get_pcap_header( void )
         fprintf( stderr, "Error: Wrong file type.\n" );
         return 1;
     }
+
     if ( network != 1 ) {
-        fprintf( stderr, "Error: Currently only Ethernet packets \
-                          are supported.\n" );
+        fprintf( stderr, 
+                "Error: Currently only Ethernet packets are supported.\n" );
         return 1;
     }
 
@@ -268,12 +269,12 @@ int decode_tcp( int len )
     int checksum        = get16();
     int urgent_p        = get16();
     int data_offset     = ( flags >> 12 );
-    int options_len     = data_offset - 5;
+    int options_len     = ( data_offset - 5 ) * 4;
 
     printf( "Source Port: %d\n", source_port );
     printf( "Destination Port: %d\n", dest_port );
-    printf( "Sequence Number: %d\n", sequence_number );
-    printf( "ACK Number: %d\n", ack_number );
+    printf( "Sequence Number: %u\n", sequence_number );
+    printf( "ACK Number: %u\n", ack_number );
     printf( "Flags: " );
     if ( ( flags & 0x100 ) != 0 )
         printf( "\tNS\n" );
@@ -299,8 +300,56 @@ int decode_tcp( int len )
     printf( "Checksum: %02x\n", checksum );
     printf( "Urgent Pointer: %02x\n", urgent_p );
 
-    for ( i = 0; i < options_len; i++ )
-        printf( "Options: %04x\n", get32() );
+    if ( options_len > 0 )
+        printf( "TCP Options:\n" );
+    while ( options_len > 0 ) {
+        int option_type     = getc( PCAP_FILE );
+        int this_option_len;
+        switch ( option_type ) {
+        case 0:
+            printf( "\tEnd of options\n" );
+            break;
+        case 1:
+            printf( "\tNo operation\n" );
+            break;
+        case 2:
+            printf( "\tMax segment size\n" );
+            break;
+        case 3:
+            printf( "\tWindow Scale\n" );
+            break;
+        case 4:
+            printf( "\tSelective Acknowledgement permitted\n" );
+            break;
+        case 5:
+            printf( "\tSelective Acknowledgement\n" );
+            break;
+        case 8:
+            printf( "\tTimestamp and echo of previous timestamp\n" );
+            break;
+        case 14:
+            printf( "\tTCP Alternate Checksum Request\n" );
+            break;
+        case 15:
+            printf( "\tTCP Alternate Checksum Data\n" );
+            break;
+        default:
+            printf( "\tOption Code: %d", option_type );
+        }
+        if ( option_type > 1 ) {
+            this_option_len = getc( PCAP_FILE );
+            if ( this_option_len > 2 ) {
+                printf( "\t\tOption Data: " );
+                for ( i = 0; i < this_option_len - 2; i++ ) {
+                    printf( "%d", getc( PCAP_FILE ) );
+                }
+                printf( "\n" );
+            }
+        } else
+            this_option_len = 1;
+
+        options_len -= this_option_len;
+    }
 
     get_raw_payload( len - ( data_offset * 4 ) );
     
@@ -434,7 +483,10 @@ int decode_ipv4( void )
 {
     int byte            = getc( PCAP_FILE );
     int version         = ( byte >> 4 );
+    int header_length   = ( byte & 0xf );
     int type_of_service = getc( PCAP_FILE );
+    int diff_serv_code  = ( type_of_service >> 2 );
+    int ecn             = ( type_of_service & 0x3 );
     int length          = get16();
     int ident           = get16();
     int flags           = get16();
@@ -443,7 +495,9 @@ int decode_ipv4( void )
     int checksum        = get16();
 
     printf( "IPv: %d\n", version );
-    printf( "TOS: %d\n", type_of_service );
+    printf( "Header Length: %d bytes\n", ( header_length * 4 ) );
+    printf( "Differentiated Services Code Point: %d\n", diff_serv_code );
+    printf( "Explicit Congestion Notification: %d\n", ecn );
     printf( "Total Length: %d bytes\n", length );
     printf( "Ident: %d\n", ident );
     printf( "Flags: %04x\n", flags );
@@ -456,6 +510,57 @@ int decode_ipv4( void )
     printf( "Desination Address: " );
     get_ipv4_addr();
     printf( "\n" );
+
+    if ( header_length > 5 ) {
+        int options_len = ( header_length - 5 ) * 4;
+        printf( "IPv4 Options:\n" );
+        while ( options_len > 0 ) {
+            int this_option = getc( PCAP_FILE );
+            int copied      = ( this_option >> 7 );
+            int class       = ( this_option & 0x60 );
+            int number      = ( this_option & 0x1f );
+            int this_option_len;
+
+            if ( number > 1 )
+                this_option_len = getc( PCAP_FILE ) - 2;
+            else
+                this_option_len = 1;
+
+            printf( "\tCopied: %d\n", copied);
+            printf( "\tClass: %d\n", class);
+
+            switch ( this_option ) {
+            case 0:
+                printf( "\t\tEnd of Option list\n" );
+                break;
+            case 1:
+                printf( "\t\tNo Operation\n" );
+                break;
+            case 2:
+                printf( "\t\tSecurity\n" );
+                break;
+            case 3:
+                printf( "\t\tLoose Source Routing\n" );
+                break;
+            case 4:
+                printf( "\t\tInternet Timestamp\n" );
+                break;
+            case 7:
+                printf( "\t\tRecord Route\n" );
+                break;
+            case 8:
+                printf( "\t\tStream ID\n" );
+                break;
+            case 9:
+                printf( "\t\tStrict Source Routing\n" );
+                break;
+            default:
+                printf( "\t\tNumber: %d\n", number );
+            }
+            options_len -= this_option_len;    
+        }
+
+    }
 
     if ( protocol == 1 ) {
         printf( "ICMP:\n" );
@@ -640,7 +745,7 @@ int decode_raw( void )
         ch = getc( PCAP_FILE );
         if ( ch == EOF )
             break;
-        (void) ungetc( ch, stdin );
+        (void) ungetc( ch, PCAP_FILE );
 
         i++;
     }
