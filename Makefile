@@ -12,7 +12,8 @@ wireguppy.o: wireguppy.c
 clean:
 	rm -rf *o wireguppy
 
-test: test1 test2 test3 test4 test5 test6 test7 test8 test9 test10 test11
+test: test1 test2 test3 test4 test5 test6 test7 test8 test9 test10 \
+	  test11 test12 test13 test14 test15
 
 test1: wireguppy
 	@ [ ./wireguppy < tests/BITTORRENT.pcap ] && echo "Test 1 Passed"
@@ -47,3 +48,16 @@ test10: wireguppy
 
 test11: wireguppy
 	@ [ ./wireguppy < tests/xmas2011.pcap ] && echo "Test 11 Passed"
+
+test12: wireguppy
+	@ [ ./wireguppy < tests/IP_in_IP.cap ] && echo "Test 12 Passed"
+
+test13: wireguppy
+	@ [ ./wireguppy < tests/IPv6_in_IP.cap ] && echo "Test 13 Passed"
+
+test14: wireguppy
+	@ [ ./wireguppy < tests/ipv6_neighbor_spoofing.cap ] \
+		&& echo "Test 14 Passed"
+
+test15: wireguppy
+	@ [ ./wireguppy < tests/OSPFv3_with_AH.cap ] && echo "Test 15 Passed"

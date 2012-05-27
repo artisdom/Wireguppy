@@ -223,8 +223,6 @@ void get_raw_payload( int len )
 
         human_read = calloc( len + 1, sizeof( char ) );
 
-        printf( "Raw payload: \n" );
-
         for ( i = 1; i <= len; i++ ) {
             ch = getc( PCAP_FILE );
 
@@ -334,14 +332,22 @@ int decode_tcp( int len )
             printf( "\tTCP Alternate Checksum Data\n" );
             break;
         default:
-            printf( "\tOption Code: %d", option_type );
+            printf( "\tOption Code: %d\n", option_type );
         }
         if ( option_type > 1 ) {
             this_option_len = getc( PCAP_FILE );
             if ( this_option_len > 2 ) {
                 printf( "\t\tOption Data: " );
-                for ( i = 0; i < this_option_len - 2; i++ ) {
-                    printf( "%d", getc( PCAP_FILE ) );
+                if ( option_type == 8 ) {
+                    unsigned int sender_ts = get32();
+                    unsigned int echo_ts = get32();
+                    printf( "\n" );
+                    printf( "\t\t\tSender Timestamp: %d\n", sender_ts );
+                    printf( "\t\t\tEcho Timestamp: %d", echo_ts );
+                } else {
+                    for ( i = 0; i < this_option_len - 2; i++ ) {
+                        printf( "%d", getc( PCAP_FILE ) );
+                    }
                 }
                 printf( "\n" );
             }
@@ -427,6 +433,65 @@ int decode_udp_lite( int len )
     return 0;
 }
 
+int decode_ipv6_ext( int plength )
+{
+    int i, payload_length;
+    int next_header = getc( PCAP_FILE );
+    int len         = getc( PCAP_FILE );
+
+    get16();
+    get32();
+
+    for ( i = 0; i < len; i++ )
+        skip_bytes( 4 );
+
+    payload_length = plength - ( 8 + ( len * 4 ) );
+
+    if ( next_header == 0 ) {
+        printf( "IPv6 Hop-by-Hop Options\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 1 ) {
+        printf( "ICMP:\n" );
+        decode_icmp( payload_length );
+    } else if( next_header == 4 ) {
+        printf( "Encapsalated IPv4:\n" );
+        decode_ipv4();
+    } else if ( next_header == 6 ) {
+        printf( "TCP:\n" );
+        decode_tcp( payload_length );
+    } else if ( next_header == 17 ) {
+        printf( "UDP:\n" );
+        decode_udp();
+    } else if ( next_header == 41 ) {
+        printf( "Encapsalated IPv6:\n" );
+        decode_ipv6();
+    } else if ( next_header == 43 ) {
+        printf( "IPv6 Routing Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 44 ) {
+        printf( "IPv6 Fragment Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 50 ) {
+        printf( "IPv6 Encapsulated Security Payload Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 51 ) {
+        printf( "IPv6 Authentication Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 60 ) {
+        printf( "IPv6 Destination Options\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 58 ) {
+        printf( "ICMPv6:\n" );
+        decode_icmpv6( payload_length );
+    } else if ( next_header == 136 ) {
+        printf( "UDP-Lite:\n" );
+        decode_udp_lite( payload_length );
+    } else
+        skip_bytes( payload_length );
+
+    return 8 + ( len * 4 );
+}
+
 
 int decode_ipv6( void )
 {
@@ -451,7 +516,10 @@ int decode_ipv6( void )
     get_ipv6_addr();
     printf( "\n" );
 
-    if ( next_header == 1 ) {
+    if ( next_header == 0 ) {
+        printf( "IPv6 Hop-by-Hop Options\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 1 ) {
         printf( "ICMP:\n" );
         decode_icmp( payload_length );
     } else if( next_header == 4 ) {
@@ -466,6 +534,21 @@ int decode_ipv6( void )
     } else if ( next_header == 41 ) {
         printf( "Encapsalated IPv6:\n" );
         decode_ipv6();
+    } else if ( next_header == 43 ) {
+        printf( "IPv6 Routing Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 44 ) {
+        printf( "IPv6 Fragment Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 50 ) {
+        printf( "IPv6 Encapsulated Security Payload Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 51 ) {
+        printf( "IPv6 Authentication Header\n" );
+        decode_ipv6_ext( payload_length );
+    } else if ( next_header == 60 ) {
+        printf( "IPv6 Destination Options\n" );
+        decode_ipv6_ext( payload_length );
     } else if ( next_header == 58 ) {
         printf( "ICMPv6:\n" );
         decode_icmpv6( payload_length );
@@ -610,13 +693,11 @@ int decode_arp( void )
     else
         printf( "response\n" );
 
-    if ( htype != 1 ) {
-        fprintf( stderr, "Error: Unsupported protocol\n" );
-        exit( 1 );
-    }
-
     printf( "Sender Hardware Address: " );
-    get_mac();
+    if ( htype != 1 )
+        get_raw_payload( hlen );
+    else
+        get_mac();
     printf( "\n" );
     len += hlen;
 
@@ -625,16 +706,17 @@ int decode_arp( void )
         get_ipv4_addr();
     else if ( ptype == 0x86dd )
         get_ipv6_addr();
-    else {
-        fprintf( stderr, "Error: Unsupported protocol\n" );
-        exit( 1 );
-    }
+    else
+        get_raw_payload( plen );
     printf( "\n" );
     len += plen;
 
 
     printf( "Target Hardware Address: " );
-    get_mac();
+    if ( htype != 1 )
+        get_raw_payload( hlen );
+    else
+        get_mac();
     printf( "\n" );
     len += hlen;
 
@@ -643,10 +725,8 @@ int decode_arp( void )
         get_ipv4_addr();
     else if ( ptype == 0x86dd )
         get_ipv6_addr();
-    else {
-        fprintf( stderr, "Error: Unsupported protocol\n" );
-        exit( 1 );
-    }
+    else
+        get_raw_payload( plen );
     printf( "\n" );
     len += plen;
 
