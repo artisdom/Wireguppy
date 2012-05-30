@@ -39,6 +39,7 @@ int decode_icmp( int len );
 int decode_icmpv6( int len );
 int decode_udp_lite( int len );
 int decode_ipv6( void );
+int decode_ipv6_ext( int plength );
 int decode_ipv4( void );
 int decode_arp( void );
 int decode_raw( void );
